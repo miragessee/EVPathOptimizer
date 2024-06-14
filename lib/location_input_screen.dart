@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:map_location_picker/map_location_picker.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+final startLocationProvider = StateProvider<String?>((ref) => null);
+final endLocationProvider = StateProvider<String?>((ref) => null);
 
 class LocationInputScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final startLocation = ref.watch(startLocationProvider);
+    final endLocation = ref.watch(endLocationProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Nereden -> Nereye'),
@@ -16,10 +24,20 @@ class LocationInputScreen extends ConsumerWidget {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  // TODO: Nereden konumunu seç
+                onPressed: () async {
+                  var result = await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => MapLocationPicker(
+                        apiKey: dotenv.env['GOOGLE_API_KEY']!,
+                        popOnNextButtonTaped: true,
+                      ),
+                    ),
+                  );
+                  if (result != null) {
+                    ref.read(startLocationProvider.notifier).state = result.address;
+                  }
                 },
-                child: Text('Nereden', style: TextStyle(fontSize: 18)),
+                child: Text(startLocation ?? 'Nereden', style: TextStyle(fontSize: 18)),
                 style: ElevatedButton.styleFrom(
                   padding: EdgeInsets.symmetric(vertical: 16.0),
                 ),
@@ -29,10 +47,20 @@ class LocationInputScreen extends ConsumerWidget {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  // TODO: Nereye konumunu seç
+                onPressed: () async {
+                  var result = await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => MapLocationPicker(
+                        apiKey: dotenv.env['GOOGLE_API_KEY']!,
+                        popOnNextButtonTaped: true,
+                      ),
+                    ),
+                  );
+                  if (result != null) {
+                    ref.read(endLocationProvider.notifier).state = result.address;
+                  }
                 },
-                child: Text('Nereye', style: TextStyle(fontSize: 18)),
+                child: Text(endLocation ?? 'Nereye', style: TextStyle(fontSize: 18)),
                 style: ElevatedButton.styleFrom(
                   padding: EdgeInsets.symmetric(vertical: 16.0),
                 ),
