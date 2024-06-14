@@ -31,7 +31,7 @@ final chargePointsProvider = FutureProvider<List<dynamic>>((ref) async {
     } else {
       throw Exception('Failed to load charge points');
     }
-  } on DioError catch (e) {
+  } on DioException catch (e) {
     if (e.response?.statusCode == 503) {
       throw Exception('Service Unavailable. Please try again later.');
     } else {
