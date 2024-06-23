@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:map_location_picker/map_location_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'map_screen.dart';
+
 final startLocationProvider = StateProvider<String?>((ref) => null);
 final endLocationProvider = StateProvider<String?>((ref) => null);
 
@@ -30,11 +32,12 @@ class LocationInputScreen extends ConsumerWidget {
                       builder: (context) => MapLocationPicker(
                         apiKey: dotenv.env['GOOGLE_API_KEY']!,
                         popOnNextButtonTaped: true,
+                        currentLatLng: LatLng(39.9396351, 32.815569),
                       ),
                     ),
                   );
                   if (result != null) {
-                    ref.read(startLocationProvider.notifier).state = result.address;
+                    ref.read(startLocationProvider.notifier).state = result.formattedAddress;
                   }
                 },
                 child: Text(startLocation ?? 'Nereden', style: TextStyle(fontSize: 18)),
@@ -53,14 +56,31 @@ class LocationInputScreen extends ConsumerWidget {
                       builder: (context) => MapLocationPicker(
                         apiKey: dotenv.env['GOOGLE_API_KEY']!,
                         popOnNextButtonTaped: true,
+                        currentLatLng: LatLng(39.9396351, 32.815569),
                       ),
                     ),
                   );
                   if (result != null) {
-                    ref.read(endLocationProvider.notifier).state = result.address;
+                    ref.read(endLocationProvider.notifier).state = result.formattedAddress;
                   }
                 },
                 child: Text(endLocation ?? 'Nereye', style: TextStyle(fontSize: 18)),
+                style: ElevatedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(vertical: 16.0),
+                ),
+              ),
+            ),
+            SizedBox(height: 32.0),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => MapScreen()),
+                  );
+                },
+                child: Text('Yolu Çiz', style: TextStyle(fontSize: 18)),
                 style: ElevatedButton.styleFrom(
                   padding: EdgeInsets.symmetric(vertical: 16.0),
                 ),
