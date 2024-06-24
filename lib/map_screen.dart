@@ -13,6 +13,11 @@ final markerProvider = StateProvider<Set<Marker>>((ref) => {});
 final selectedRouteProvider = StateProvider<Polyline?>((ref) => null);
 
 class MapScreen extends ConsumerStatefulWidget {
+
+  MapScreen({
+    Key? key,
+  }) : super(key: key);
+
   @override
   _MapScreenState createState() => _MapScreenState();
 }

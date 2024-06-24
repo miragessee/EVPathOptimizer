@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-final batteryCapacityProvider = StateProvider<double>((ref) => 50.0);
-final energyConsumptionProvider = StateProvider<double>((ref) => 150.0);
-final batteryPercentageProvider = StateProvider<double>((ref) => 100.0);
+import 'main.dart';
 
 class SettingsScreen extends ConsumerWidget {
   @override
@@ -40,7 +39,8 @@ class SettingsScreen extends ConsumerWidget {
                 },
               ),
               SizedBox(height: 32.0),
-              TextField(
+              TextFormField(
+                initialValue: batteryPercentage.toString(),
                 decoration: InputDecoration(labelText: 'Pil Şarj Durumu (%)'),
                 keyboardType: TextInputType.number,
                 onChanged: (value) {
@@ -51,8 +51,18 @@ class SettingsScreen extends ConsumerWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
+                  onPressed: () async {
+                    // SharedPreferences örneğini al
+                    SharedPreferences prefs = await SharedPreferences.getInstance();
+
+                    // Değerleri kaydet
+                    await prefs.setDouble('batteryCapacity', ref.read(batteryCapacityProvider));
+                    await prefs.setDouble('energyConsumption', ref.read(energyConsumptionProvider));
+                    await prefs.setDouble('batteryPercentage', ref.read(batteryPercentageProvider));
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Ayarlar kaydedildi')),
+                    );
                   },
                   child: Text('Kaydet', style: TextStyle(fontSize: 18)),
                   style: ElevatedButton.styleFrom(
