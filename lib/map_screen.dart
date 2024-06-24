@@ -28,6 +28,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final polylines = ref.watch(polylineProvider);
     final markers = ref.watch(markerProvider);
     final selectedRoute = ref.watch(selectedRouteProvider);
+    final batteryCapacity = ref.watch(batteryCapacityProvider);
+    final energyConsumption = ref.watch(energyConsumptionProvider);
+    final batteryPercentage = ref.watch(batteryPercentageProvider);
 
     Future<void> _drawRoutes() async {
       if (startLocation == null || endLocation == null) return;
@@ -101,6 +104,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           ),
         );
         isRouteDrawn = true; // Rota çizildiğinde bayrağı güncelle
+
+        // Kaotik Çoklu Evren Algoritması ile en uygun yolu bulma
+        _findOptimalRoute(response.data['routes'], batteryCapacity, batteryPercentage, energyConsumption);
       }
     }
 
@@ -266,6 +272,31 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       await launch(url);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Yol tarifi başlatılamadı')));
+    }
+  }
+
+  // Kaotik Çoklu Evren Algoritması ile en uygun yolu bulma
+  void _findOptimalRoute(List<dynamic> routes, batteryCapacity, batteryPercentage, energyConsumption) {
+    // Batarya ve enerji tüketimi bilgileri
+    double availableEnergy = (batteryCapacity * (batteryPercentage / 100));
+    double maxDistance = (availableEnergy / energyConsumption) * 1000; // km cinsinden mesafe
+
+    for (var route in routes) {
+      double routeDistance = route['legs'][0]['distance']['value'] / 1000.0; // metreyi km'ye çevir
+      if (routeDistance <= maxDistance) {
+        // En uygun rotayı yeşil renkte çiz
+        var points = route['overview_polyline']['points'];
+        var decodedPoints = _decodePolyline(points);
+        ref.read(polylineProvider.notifier).state.add(
+          Polyline(
+            polylineId: PolylineId('optimalRoute'),
+            points: decodedPoints,
+            color: Colors.green,
+            width: 5,
+          ),
+        );
+        break; // En uygun rotayı bulduktan sonra döngüden çık
+      }
     }
   }
 }
