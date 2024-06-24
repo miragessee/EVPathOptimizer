@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'location_input_screen.dart';
 import 'main.dart';
+import 'open_charge_map_api.dart';
 import 'settings_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -36,6 +37,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final batteryCapacity = ref.watch(batteryCapacityProvider);
     final energyConsumption = ref.watch(energyConsumptionProvider);
     final batteryPercentage = ref.watch(batteryPercentageProvider);
+    final chargePointsAsyncValue = ref.watch(chargePointsProvider);
 
     Future<void> _drawRoutes() async {
       if (startLocation == null || endLocation == null) return;
@@ -90,6 +92,30 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
         ref.read(polylineProvider.notifier).state = newPolylines;
         ref.read(markerProvider.notifier).state = newMarkers;
+
+        // Şarj noktalarını ekle
+        if (chargePointsAsyncValue.asData != null) {
+          var chargePoints = chargePointsAsyncValue.asData!.value;
+          for (var point in chargePoints) {
+            newMarkers.add(
+              Marker(
+                markerId: MarkerId(point['ID'].toString()),
+                position: LatLng(point['AddressInfo']['Latitude'], point['AddressInfo']['Longitude']),
+                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+                infoWindow: InfoWindow(
+                  title: point['AddressInfo']['Title'],
+                  snippet: 'Şarj Noktası',
+                ),
+              ),
+            );
+          }
+        }
+
+        // Mevcut marker setine yeni markerları ekleyin
+        ref.read(markerProvider.notifier).state = {
+          ...ref.read(markerProvider.notifier).state,
+          ...newMarkers,
+        };
 
         // Kamerayı rotayı gösterecek şekilde hareket ettir
         var allLatLng = newPolylines.expand((polyline) => polyline.points).toList();
