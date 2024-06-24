@@ -3,10 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:map_location_picker/map_location_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'main.dart';
 import 'map_screen.dart';
-
-final startLocationProvider = StateProvider<String?>((ref) => null);
-final endLocationProvider = StateProvider<String?>((ref) => null);
 
 class LocationInputScreen extends ConsumerWidget {
   @override
@@ -33,6 +31,7 @@ class LocationInputScreen extends ConsumerWidget {
                         apiKey: dotenv.env['GOOGLE_API_KEY']!,
                         popOnNextButtonTaped: true,
                         currentLatLng: LatLng(39.9396351, 32.815569),
+                        language: 'tr',
                       ),
                     ),
                   );
@@ -57,6 +56,7 @@ class LocationInputScreen extends ConsumerWidget {
                         apiKey: dotenv.env['GOOGLE_API_KEY']!,
                         popOnNextButtonTaped: true,
                         currentLatLng: LatLng(39.9396351, 32.815569),
+                        language: 'tr',
                       ),
                     ),
                   );
@@ -76,9 +76,6 @@ class LocationInputScreen extends ConsumerWidget {
               child: ElevatedButton(
                 onPressed: () {
                   Navigator.of(context).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => MapScreen()),
-                  );
                 },
                 child: Text('Yolu Çiz', style: TextStyle(fontSize: 18)),
                 style: ElevatedButton.styleFrom(
