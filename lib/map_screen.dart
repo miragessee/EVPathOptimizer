@@ -1,5 +1,4 @@
 import 'dart:math';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -17,7 +16,6 @@ final markerProvider = StateProvider<Set<Marker>>((ref) => {});
 final selectedRouteProvider = StateProvider<Polyline?>((ref) => null);
 
 class MapScreen extends ConsumerStatefulWidget {
-
   MapScreen({
     Key? key,
   }) : super(key: key);
@@ -29,6 +27,7 @@ class MapScreen extends ConsumerStatefulWidget {
 class _MapScreenState extends ConsumerState<MapScreen> {
   GoogleMapController? mapController;
   bool isRouteDrawn = false;
+  List<LatLng> currentRoutePoints = [];
 
   @override
   Widget build(BuildContext context) {
@@ -69,7 +68,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           ref: ref,
         );
 
-        cmvo.run();
+        await cmvo.run();
+        // En iyi rotanın noktalarını kaydedin
+        currentRoutePoints = cmvo.bestRoutePoints;
       }
     }
 
@@ -100,11 +101,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             _drawRoutes();
           }
         },
+        onTap: (LatLng point) {
+          // Eğer tıklanan nokta bir polyline üzerindeyse navigasyonu başlat
+          // for (var polyline in polylines) {
+          //   if (_isPointOnPolyline(point, polyline.points)) {
+          //     _launchNavigation(currentRoutePoints);
+          //     break;
+          //   }
+          // }
+          _launchNavigation(currentRoutePoints);
+        },
       ),
       floatingActionButton: Align(
         alignment: Alignment.bottomLeft,
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(32.0),
           child: FloatingActionButton(
             onPressed: () => _openBottomSheet(context),
             child: Icon(Icons.add),
@@ -160,245 +171,76 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  List<LatLng> _decodePolyline(String poly) {
-    var list = poly.codeUnits;
-    var lList = <double>[];
-    int index = 0;
-    int len = poly.length;
-    int c = 0;
+  void _launchNavigation(List<LatLng> routePoints) async {
+    if (routePoints.isEmpty) return;
+    final startLat = routePoints.first.latitude;
+    final startLng = routePoints.first.longitude;
+    final endLat = routePoints.last.latitude;
+    final endLng = routePoints.last.longitude;
 
-    // repeating until all attributes are decoded
-    do {
-      var shift = 0;
-      int result = 0;
+    // Waypoints oluştur
+    List<String> waypoints = routePoints.skip(1).take(routePoints.length - 2).map((point) => '${point.latitude},${point.longitude}').toList();
+    String waypointsString = waypoints.join('|');
 
-      // for decoding value of one attribute
-      do {
-        c = list[index] - 63;
-        result |= (c & 0x1F) << (shift * 5);
-        index++;
-        shift++;
-      } while (c >= 32);
-      /* if value is negative then bitwise not the value */
-      if (result & 1 == 1) {
-        result = ~result;
-      }
-      var result1 = (result >> 1) * 0.00001;
-      lList.add(result1);
-    } while (index < len);
-
-    /*adding to previous value as done in encoding */
-    for (var i = 2; i < lList.length; i++) lList[i] += lList[i - 2];
-
-    List<LatLng> decodedPoly = [];
-    for (var i = 0; i < lList.length; i += 2) {
-      decodedPoly.add(LatLng(lList[i], lList[i + 1]));
-    }
-    return decodedPoly;
-  }
-
-  // Rota bilgisini gösteren fonksiyon
-  void _showRouteInfo(BuildContext context, dynamic route) {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text('Toplam Mesafe: ${route['legs'][0]['distance']['text']}'),
-              subtitle: Text('Tahmini Süre: ${route['legs'][0]['duration_in_traffic'] != null ? route['legs'][0]['duration_in_traffic']['text'] : route['legs'][0]['duration']['text']}'),
-            ),
-            ListTile(
-              title: ElevatedButton(
-                onPressed: () {
-                  _launchNavigation(
-                    route['legs'][0]['start_location']['lat'],
-                    route['legs'][0]['start_location']['lng'],
-                    route['legs'][0]['end_location']['lat'],
-                    route['legs'][0]['end_location']['lng'],
-                  );
-                },
-                child: Text('Yol Tarifini Başlat'),
-              ),
-            ),
-          ],
-        );
-      },
+    // Google Maps URL oluşturma
+    final url = Uri.encodeFull(
+        'https://www.google.com/maps/dir/?api=1&origin=$startLat,$startLng&destination=$endLat,$endLng&travelmode=driving&waypoints=$waypointsString'
     );
-  }
 
-  // Google Haritalar'da yol tarifi başlatan fonksiyon
-  Future<void> _launchNavigation(double startLat, double startLng, double endLat, double endLng) async {
-    final url = 'https://www.google.com/maps/dir/?api=1&origin=$startLat,$startLng&destination=$endLat,$endLng&travelmode=driving';
     if (await canLaunch(url)) {
       await launch(url);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Yol tarifi başlatılamadı')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Yol tarifi başlatılamadı, URL kontrol edin veya Google Maps yüklü olup olmadığını kontrol edin.'))
+      );
     }
   }
 
-  // Kaotik Çoklu Evren Algoritması ile en uygun yolu bulma
-  // En yakın şarj istasyonunu bulma ve rotaya ekleme fonksiyonu
-  void _findOptimalRoute(List<dynamic> routes, double batteryCapacity, double batteryPercentage, double energyConsumption, List<dynamic> chargePoints, String endLocation) {
-    double availableEnergy = batteryCapacity * (batteryPercentage / 100);
-    double maxTravelDistance = (availableEnergy / energyConsumption) * 1000; // km cinsinden
-
-    List<Map<String, dynamic>> universe = routes.map((route) {
-      double distance = route['legs'][0]['distance']['value'] / 1000.0; // metreyi km'ye çevir
-      return {
-        'distance': distance,
-        'points': route['overview_polyline']['points'],
-        'chargeNeeded': distance > maxTravelDistance,
-        'fitness': distance > maxTravelDistance ? double.infinity : distance, // CMVO için fitness değeri
-      };
-    }).toList();
-
-    // Logistic Map kullanarak kaotik harita oluşturma
-    double chaoticMap(double x) => 4.0 * x * (1 - x);
-
-    // Kaotik Çoklu Evren Algoritması (CMVO)
-    for (int t = 0; t < 100; t++) {
-      for (var element in universe) {
-        double r = chaoticMap(Random().nextDouble()); // Kaotik harita
-        if (element['chargeNeeded']) {
-          // Solucan deliği: En yakın şarj istasyonunu bul ve rotayı ekle
-          dynamic closestChargePoint = _findClosestChargePoint(chargePoints, _decodePolyline(element['points']));
-          if (closestChargePoint != null) {
-            // Şarj istasyonuna rota çiz
-            _drawRouteToChargeStation(_decodePolyline(element['points']), closestChargePoint);
-            // Şarj istasyonundan sonraki hedefe rota çiz
-            _drawRemainingRoute(closestChargePoint, endLocation);
-            element['fitness'] = _calculateDistance(_decodePolyline(element['points']).first, LatLng(closestChargePoint['AddressInfo']['Latitude'], closestChargePoint['AddressInfo']['Longitude']));
-          }
-        } else {
-          // Beyaz delik: Doğrudan rota çiz
-          //_drawPolyline(_decodePolyline(element['points']), Colors.green);
-          element['fitness'] = element['distance'];
-        }
+  bool _isPointOnPolyline(LatLng point, List<LatLng> polylinePoints) {
+    // Polyline üzerinde bir noktayı kontrol etme algoritması
+    for (int i = 0; i < polylinePoints.length - 1; i++) {
+      LatLng p1 = polylinePoints[i];
+      LatLng p2 = polylinePoints[i + 1];
+      double distance = _distanceToLineSegment(point, p1, p2);
+      if (distance < 0.0001) { // Tolerans aralığı
+        return true;
       }
     }
+    return false;
+  }
 
-    // En uygun rota seçimi
-    var bestRoute = universe.reduce((a, b) => a['fitness'] < b['fitness'] ? a : b);
-    if (bestRoute['chargeNeeded']) {
-      // Şarj istasyonuna rota ve şarj istasyonundan sonra rota
-      dynamic closestChargePoint = _findClosestChargePoint(chargePoints, _decodePolyline(bestRoute['points']));
-      _drawRouteToChargeStation(_decodePolyline(bestRoute['points']), closestChargePoint);
-      _drawRemainingRoute(closestChargePoint, endLocation);
+  double _distanceToLineSegment(LatLng p, LatLng p1, LatLng p2) {
+    double x = p.latitude;
+    double y = p.longitude;
+    double x1 = p1.latitude;
+    double y1 = p1.longitude;
+    double x2 = p2.latitude;
+    double y2 = p2.longitude;
+
+    double A = x - x1;
+    double B = y - y1;
+    double C = x2 - x1;
+    double D = y2 - y1;
+
+    double dot = A * C + B * D;
+    double len_sq = C * C + D * D;
+    double param = (len_sq != 0) ? dot / len_sq : -1;
+
+    double xx, yy;
+
+    if (param < 0) {
+      xx = x1;
+      yy = y1;
+    } else if (param > 1) {
+      xx = x2;
+      yy = y2;
     } else {
-      // Doğrudan rota
-      _drawPolyline(_decodePolyline(bestRoute['points']), Colors.green);
-    }
-  }
-
-// En yakın şarj istasyonunu bulma ve rotaya ekleme fonksiyonları aynı kalır
-  void _drawPolyline(List<LatLng> points, Color color) {
-    ref.read(polylineProvider.notifier).state.add(
-      Polyline(
-        polylineId: PolylineId('route_${UniqueKey().toString()}'),
-        points: points,
-        color: color,
-        width: 5,
-      ),
-    );
-  }
-
-  // Şarj istasyonuna giden yolun rota çizgilerini çizen fonksiyon
-  void _drawRouteToChargeStation(List<LatLng> routePoints, dynamic chargeStation) async {
-    var response = await Dio().get(
-      'https://maps.googleapis.com/maps/api/directions/json',
-      queryParameters: {
-        'origin': '${routePoints.first.latitude},${routePoints.first.longitude}',
-        'destination': '${chargeStation['AddressInfo']['Latitude']},${chargeStation['AddressInfo']['Longitude']}',
-        'key': dotenv.env['GOOGLE_API_KEY'],
-      },
-    );
-
-    if (response.data['routes'].isNotEmpty) {
-      var points = response.data['routes'][0]['overview_polyline']['points'];
-      var decodedPoints = _decodePolyline(points);
-
-      ref.read(polylineProvider.notifier).state.add(
-        Polyline(
-          polylineId: PolylineId('toChargeStation'),
-          points: decodedPoints,
-          color: Colors.orange,
-          width: 5,
-        ),
-      );
-    }
-  }
-
-  // Şarj istasyonundan hedefe giden yolun rota çizgilerini çizen fonksiyon
-  void _drawRemainingRoute(dynamic chargeStation, String? endLocation) async {
-    var response = await Dio().get(
-      'https://maps.googleapis.com/maps/api/directions/json',
-      queryParameters: {
-        'origin': '${chargeStation['AddressInfo']['Latitude']},${chargeStation['AddressInfo']['Longitude']}',
-        'destination': endLocation,
-        'key': dotenv.env['GOOGLE_API_KEY'],
-      },
-    );
-
-    if (response.data['routes'].isNotEmpty) {
-      var points = response.data['routes'][0]['overview_polyline']['points'];
-      var decodedPoints = _decodePolyline(points);
-
-      ref.read(polylineProvider.notifier).state.add(
-        Polyline(
-          polylineId: PolylineId('remainingRoute'),
-          points: decodedPoints,
-          color: Colors.green,
-          width: 5,
-        ),
-      );
-    }
-  }
-
-// Şarj istasyonuna giden yolun rota çizgilerini çizen fonksiyon
-  void _routeToChargeStation(List<LatLng> routePoints, LatLng stationPosition) {
-    // Burada, başlangıç noktasından şarj istasyonuna giden yolu hesaplayıp çizin
-    List<LatLng> pathToStation = [routePoints.first, stationPosition]; // Basit bir örnek
-    ref.read(polylineProvider.notifier).state.add(
-      Polyline(
-        polylineId: PolylineId('toChargeStation'),
-        points: pathToStation,
-        color: Colors.orange,
-        width: 5,
-      ),
-    );
-  }
-
-  // İki nokta arası en kısa mesafeyi hesaplayan fonksiyon
-  dynamic _findClosestChargePoint(List<dynamic> chargePoints, List<LatLng> routePoints) {
-    dynamic closest = null;
-    double minDistance = double.infinity;
-
-    for (var point in chargePoints) {
-      var stationLat = point['AddressInfo']['Latitude'];
-      var stationLng = point['AddressInfo']['Longitude'];
-      var stationPosition = LatLng(stationLat, stationLng);
-
-      for (var routePoint in routePoints) {
-        double distance = _calculateDistance(routePoint, stationPosition);
-        if (distance < minDistance) {
-          minDistance = distance;
-          closest = point;
-        }
-      }
+      xx = x1 + param * C;
+      yy = y1 + param * D;
     }
 
-    return closest;
-  }
-
-  // İki nokta arası mesafeyi hesaplama
-  double _calculateDistance(LatLng start, LatLng end) {
-    var p = 0.017453292519943295;
-    var c = cos;
-    var a = 0.5 - c((end.latitude - start.latitude) * p)/2 +
-        c(start.latitude * p) * c(end.latitude * p) *
-            (1 - c((end.longitude - start.longitude) * p))/2;
-    return 12742 * asin(sqrt(a)); // 2*R*asin...
+    double dx = x - xx;
+    double dy = y - yy;
+    return sqrt(dx * dx + dy * dy);
   }
 }

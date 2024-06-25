@@ -14,6 +14,7 @@ class CMVOAlgorithm {
   final List<dynamic> chargePoints;
   final String endLocation;
   final WidgetRef ref;
+  List<LatLng> bestRoutePoints = [];
 
   CMVOAlgorithm({
     required this.routes,
@@ -25,7 +26,7 @@ class CMVOAlgorithm {
     required this.ref,
   });
 
-  void run() {
+  Future<void> run() async {
     // İlk başlangıç evreni oluştur
     List<Map<String, Object>> universe = _initializeUniverse();
 
@@ -37,7 +38,7 @@ class CMVOAlgorithm {
       double r = chaoticMap(Random().nextDouble());
 
       if (element['chargeNeeded'] as bool) {
-        _handleBlackHole(element);
+        await _handleBlackHole(element);
       } else {
         _handleWhiteHole(element, universe, r);
       }
@@ -45,7 +46,10 @@ class CMVOAlgorithm {
 
     // En iyi rotayı seç ve sonlandır
     var bestRoute = universe.reduce((a, b) => (a['fitness'] as double) < (b['fitness'] as double) ? a : b);
-    _finalizeRoute(bestRoute);
+    await _finalizeRoute(bestRoute);
+
+    // En iyi rotanın noktalarını kaydet
+    bestRoutePoints = bestRoute['decodedPoints'] as List<LatLng>;
   }
 
   List<Map<String, Object>> _initializeUniverse() {
@@ -67,11 +71,12 @@ class CMVOAlgorithm {
     return (batteryCapacity * (batteryPercentage / 100) / energyConsumption) * 1000;
   }
 
-  void _handleBlackHole(Map<String, Object> element) {
+  Future<void> _handleBlackHole(Map<String, Object> element) async {
     dynamic closestChargePoint = _findClosestChargePoint(element['decodedPoints'] as List<LatLng>);
     if (closestChargePoint != null) {
-      // _drawRouteToChargeStation(element['decodedPoints'] as List<LatLng>, closestChargePoint);
-      // _drawRemainingRoute(closestChargePoint, endLocation);
+      // List<LatLng> routeToChargeStation = await _drawRouteToChargeStation(element['decodedPoints'] as List<LatLng>, closestChargePoint);
+      // List<LatLng> remainingRoute = await _drawRemainingRoute(closestChargePoint, endLocation);
+      // element['decodedPoints'] = [...routeToChargeStation, ...remainingRoute];
       element['fitness'] = _calculateDistance(
         (element['decodedPoints'] as List<LatLng>).first,
         LatLng(
@@ -93,13 +98,15 @@ class CMVOAlgorithm {
     }
   }
 
-  void _finalizeRoute(Map<String, Object> bestRoute) {
+  Future<void> _finalizeRoute(Map<String, Object> bestRoute) async {
     if (bestRoute['chargeNeeded'] as bool) {
       dynamic closestChargePoint = _findClosestChargePoint(bestRoute['decodedPoints'] as List<LatLng>);
-      _drawRouteToChargeStation(bestRoute['decodedPoints'] as List<LatLng>, closestChargePoint);
-      _drawRemainingRoute(closestChargePoint, endLocation);
+      List<LatLng> routeToChargeStation = await _drawRouteToChargeStation(bestRoute['decodedPoints'] as List<LatLng>, closestChargePoint);
+      List<LatLng> remainingRoute = await _drawRemainingRoute(closestChargePoint, endLocation);
+      bestRoutePoints = [...routeToChargeStation, ...remainingRoute];
     } else {
-      _drawDirectRoute(bestRoute['decodedPoints'] as List<LatLng>);
+      bestRoutePoints = bestRoute['decodedPoints'] as List<LatLng>;
+      _drawDirectRoute(bestRoutePoints);
     }
   }
 
@@ -120,7 +127,7 @@ class CMVOAlgorithm {
     });
   }
 
-  void _drawRouteToChargeStation(List<LatLng> routePoints, dynamic chargeStation) async {
+  Future<List<LatLng>> _drawRouteToChargeStation(List<LatLng> routePoints, dynamic chargeStation) async {
     var response = await Dio().get(
       'https://maps.googleapis.com/maps/api/directions/json',
       queryParameters: {
@@ -135,10 +142,12 @@ class CMVOAlgorithm {
       var decodedPoints = _decodePolyline(points);
 
       _drawPolyline(decodedPoints, Colors.orange);
+      return decodedPoints;
     }
+    return [];
   }
 
-  void _drawRemainingRoute(dynamic chargeStation, String endLocation) async {
+  Future<List<LatLng>> _drawRemainingRoute(dynamic chargeStation, String endLocation) async {
     var response = await Dio().get(
       'https://maps.googleapis.com/maps/api/directions/json',
       queryParameters: {
@@ -153,7 +162,9 @@ class CMVOAlgorithm {
       var decodedPoints = _decodePolyline(points);
 
       _drawPolyline(decodedPoints, Colors.green);
+      return decodedPoints;
     }
+    return [];
   }
 
   dynamic _findClosestChargePoint(List<LatLng> routePoints) {
