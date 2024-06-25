@@ -42,7 +42,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final chargePointsAsyncValue = ref.watch(chargePointsProvider);
 
     Future<void> _drawRoutes() async {
-      if (startLocation == null || endLocation == null) return;
+      if (startLocation == null || endLocation == null || isRouteDrawn) return;
 
       // Google Directions API'den rota verilerini alma
       var response = await Dio().get(
@@ -71,6 +71,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         await cmvo.run();
         // En iyi rotanın noktalarını kaydedin
         currentRoutePoints = cmvo.bestRoutePoints;
+        isRouteDrawn = true; // Algoritmanın tekrar çalışmaması için bayrağı ayarla
       }
     }
 
@@ -109,6 +110,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           //     break;
           //   }
           // }
+
           _launchNavigation(currentRoutePoints);
         },
       ),

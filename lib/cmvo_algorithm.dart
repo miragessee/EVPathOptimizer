@@ -74,9 +74,6 @@ class CMVOAlgorithm {
   Future<void> _handleBlackHole(Map<String, Object> element) async {
     dynamic closestChargePoint = _findClosestChargePoint(element['decodedPoints'] as List<LatLng>);
     if (closestChargePoint != null) {
-      // List<LatLng> routeToChargeStation = await _drawRouteToChargeStation(element['decodedPoints'] as List<LatLng>, closestChargePoint);
-      // List<LatLng> remainingRoute = await _drawRemainingRoute(closestChargePoint, endLocation);
-      // element['decodedPoints'] = [...routeToChargeStation, ...remainingRoute];
       element['fitness'] = _calculateDistance(
         (element['decodedPoints'] as List<LatLng>).first,
         LatLng(
@@ -99,6 +96,9 @@ class CMVOAlgorithm {
   }
 
   Future<void> _finalizeRoute(Map<String, Object> bestRoute) async {
+    // Mevcut polylines'ları temizle
+    ref.read(polylineProvider.notifier).state = {};
+
     if (bestRoute['chargeNeeded'] as bool) {
       dynamic closestChargePoint = _findClosestChargePoint(bestRoute['decodedPoints'] as List<LatLng>);
       List<LatLng> routeToChargeStation = await _drawRouteToChargeStation(bestRoute['decodedPoints'] as List<LatLng>, closestChargePoint);
@@ -117,7 +117,6 @@ class CMVOAlgorithm {
   void _drawPolyline(List<LatLng> points, Color color) {
     var drawPoly = ref.read(polylineProvider.notifier);
     drawPoly.update((state) => {
-      ...state,
       Polyline(
         polylineId: PolylineId('route_${UniqueKey().toString()}'),
         points: points,
