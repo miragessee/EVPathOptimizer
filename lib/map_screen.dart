@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -137,7 +139,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         isRouteDrawn = true; // Rota çizildiğinde bayrağı güncelle
 
         // Kaotik Çoklu Evren Algoritması ile en uygun yolu bulma
-        _findOptimalRoute(response.data['routes'], batteryCapacity, batteryPercentage, energyConsumption);
+        _findOptimalRoute(response.data['routes'], batteryCapacity, batteryPercentage, energyConsumption, chargePointsAsyncValue.asData!.value);
       }
     }
 
@@ -307,17 +309,26 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   // Kaotik Çoklu Evren Algoritması ile en uygun yolu bulma
-  void _findOptimalRoute(List<dynamic> routes, batteryCapacity, batteryPercentage, energyConsumption) {
-    // Batarya ve enerji tüketimi bilgileri
+  void _findOptimalRoute(List<dynamic> routes, double batteryCapacity, double batteryPercentage, double energyConsumption, List<dynamic> chargePoints) {
+    // Enerji hesaplamaları
     double availableEnergy = (batteryCapacity * (batteryPercentage / 100));
-    double maxDistance = (availableEnergy / energyConsumption) * 1000; // km cinsinden mesafe
+    double maxDistance = (availableEnergy / energyConsumption) * 1000; // km cinsinden
 
-    for (var route in routes) {
-      double routeDistance = route['legs'][0]['distance']['value'] / 1000.0; // metreyi km'ye çevir
-      if (routeDistance <= maxDistance) {
-        // En uygun rotayı yeşil renkte çiz
-        var points = route['overview_polyline']['points'];
-        var decodedPoints = _decodePolyline(points);
+    // Rota ve şarj noktaları için CMVO başlangıcı
+    var universe = routes.map((route) {
+      double distance = route['legs'][0]['distance']['value'] / 1000.0; // metreyi km'ye çevir
+      return {
+        'distance': distance,
+        'points': route['overview_polyline']['points'],
+        'isBlackHole': distance > maxDistance // Kara delik: Yol çok uzun, şarj yetmeyebilir
+      };
+    }).toList();
+
+    // Kara delikleri eler, beyaz delikleri ve solucan deliklerini belirle
+    universe.removeWhere((element) => element['isBlackHole']);
+    universe.forEach((element) {
+      if (element['distance'] <= maxDistance) {
+        var decodedPoints = _decodePolyline(element['points']);
         ref.read(polylineProvider.notifier).state.add(
           Polyline(
             polylineId: PolylineId('optimalRoute'),
@@ -326,8 +337,66 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             width: 5,
           ),
         );
-        break; // En uygun rotayı bulduktan sonra döngüden çık
+      } else {
+        // Solucan delikleri ara: En yakın şarj istasyonuna yönlendir
+        // Şarj istasyonları arasında en uygununu bul
+        var closestStation = _findClosestChargePoint(chargePoints, element['points']);
+        if (closestStation != null) {
+          ref.read(markerProvider.notifier).state.add(
+            Marker(
+              markerId: MarkerId('chargeStation${closestStation['ID']}'),
+              position: LatLng(closestStation['AddressInfo']['Latitude'], closestStation['AddressInfo']['Longitude']),
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+              infoWindow: InfoWindow(
+                title: 'Şarj İstasyonu',
+                snippet: closestStation['AddressInfo']['Title'],
+              ),
+            ),
+          );
+          // Rota güncellenir, solucan deliği ile yolun yeni kısmı eklenir
+          var additionalPoints = _decodePolyline(closestStation['points']);
+          ref.read(polylineProvider.notifier).state.add(
+            Polyline(
+              polylineId: PolylineId('toChargeStation'),
+              points: additionalPoints,
+              color: Colors.orange,
+              width: 5,
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  // En yakın şarj istasyonunu bulma fonksiyonu
+  dynamic _findClosestChargePoint(List<dynamic> chargePoints, List<LatLng> routePoints) {
+    dynamic closest = null;
+    double minDistance = double.infinity;
+
+    for (var point in chargePoints) {
+      var stationLat = point['AddressInfo']['Latitude'];
+      var stationLng = point['AddressInfo']['Longitude'];
+      var stationPosition = LatLng(stationLat, stationLng);
+
+      for (var routePoint in routePoints) {
+        double distance = _calculateDistance(routePoint, stationPosition);
+        if (distance < minDistance) {
+          minDistance = distance;
+          closest = point;
+        }
       }
     }
+
+    return closest;
+  }
+
+  // İki nokta arası mesafeyi hesaplama
+  double _calculateDistance(LatLng start, LatLng end) {
+    var p = 0.017453292519943295;
+    var c = cos;
+    var a = 0.5 - c((end.latitude - start.latitude) * p)/2 +
+        c(start.latitude * p) * c(end.latitude * p) *
+            (1 - c((end.longitude - start.longitude) * p))/2;
+    return 12742 * asin(sqrt(a)); // 2*R*asin...
   }
 }
