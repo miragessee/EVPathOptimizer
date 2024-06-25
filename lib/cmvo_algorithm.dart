@@ -117,6 +117,7 @@ class CMVOAlgorithm {
   void _drawPolyline(List<LatLng> points, Color color) {
     var drawPoly = ref.read(polylineProvider.notifier);
     drawPoly.update((state) => {
+      ...state,
       Polyline(
         polylineId: PolylineId('route_${UniqueKey().toString()}'),
         points: points,
@@ -140,7 +141,18 @@ class CMVOAlgorithm {
       var points = response.data['routes'][0]['overview_polyline']['points'];
       var decodedPoints = _decodePolyline(points);
 
-      _drawPolyline(decodedPoints, Colors.orange);
+      // Orange polyline çizin
+      var drawPoly = ref.read(polylineProvider.notifier);
+      drawPoly.update((state) => {
+        ...state,
+        Polyline(
+          polylineId: PolylineId('routeToChargeStation_${UniqueKey().toString()}'),
+          points: decodedPoints,
+          color: Colors.orange,
+          width: 5,
+        ),
+      });
+
       return decodedPoints;
     }
     return [];
@@ -160,7 +172,18 @@ class CMVOAlgorithm {
       var points = response.data['routes'][0]['overview_polyline']['points'];
       var decodedPoints = _decodePolyline(points);
 
-      _drawPolyline(decodedPoints, Colors.green);
+      // Green polyline çizin
+      var drawPoly = ref.read(polylineProvider.notifier);
+      drawPoly.update((state) => {
+        ...state,
+        Polyline(
+          polylineId: PolylineId('remainingRoute_${UniqueKey().toString()}'),
+          points: decodedPoints,
+          color: Colors.green,
+          width: 5,
+        ),
+      });
+
       return decodedPoints;
     }
     return [];
