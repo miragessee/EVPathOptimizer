@@ -29,24 +29,22 @@ class CMVOAlgorithm {
     // İlk başlangıç evreni oluştur
     List<Map<String, Object>> universe = _initializeUniverse();
 
-    // Kara delikleri, beyaz delikleri ve solucan deliklerini işle
+    // Kaotik harita fonksiyonu (Logistic Map)
+    double chaoticMap(double x) => 4.0 * x * (1 - x);
+
+    // CMVO algoritması (tek iterasyon)
     for (var element in universe) {
+      double r = chaoticMap(Random().nextDouble());
+
       if (element['chargeNeeded'] as bool) {
         _handleBlackHole(element);
       } else {
-        _drawDirectRoute(element['decodedPoints'] as List<LatLng>);
+        _handleWhiteHole(element, universe, r);
       }
     }
 
-    // Çözümü optimize et
-    var bestRoute = universe.reduce((Map<String, Object> a, Map<String, Object> b) {
-      if ((a['fitness'] as num) < (b['fitness'] as num)) {
-        return a;
-      } else {
-        return b;
-      }
-    });
-
+    // En iyi rotayı seç ve sonlandır
+    var bestRoute = universe.reduce((a, b) => (a['fitness'] as double) < (b['fitness'] as double) ? a : b);
     _finalizeRoute(bestRoute);
   }
 
@@ -72,8 +70,8 @@ class CMVOAlgorithm {
   void _handleBlackHole(Map<String, Object> element) {
     dynamic closestChargePoint = _findClosestChargePoint(element['decodedPoints'] as List<LatLng>);
     if (closestChargePoint != null) {
-      _drawRouteToChargeStation(element['decodedPoints'] as List<LatLng>, closestChargePoint);
-      _drawRemainingRoute(closestChargePoint, endLocation);
+      // _drawRouteToChargeStation(element['decodedPoints'] as List<LatLng>, closestChargePoint);
+      // _drawRemainingRoute(closestChargePoint, endLocation);
       element['fitness'] = _calculateDistance(
         (element['decodedPoints'] as List<LatLng>).first,
         LatLng(
@@ -81,6 +79,17 @@ class CMVOAlgorithm {
           closestChargePoint['AddressInfo']['Longitude'],
         ),
       );
+    }
+  }
+
+  void _handleWhiteHole(Map<String, Object> element, List<Map<String, Object>> universe, double r) {
+    // Beyaz delik: Diğer evrenlerin bilgilerini paylaş
+    int index = (r * universe.length).floor();
+    var otherElement = universe[index];
+
+    if (!(otherElement['chargeNeeded'] as bool)) {
+      element['decodedPoints'] = otherElement['decodedPoints']!;
+      element['fitness'] = otherElement['fitness']!;
     }
   }
 
