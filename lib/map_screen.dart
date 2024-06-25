@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'cmvo_algorithm.dart';
 import 'location_input_screen.dart';
 import 'main.dart';
 import 'open_charge_map_api.dart';
@@ -58,88 +59,100 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       );
 
       if (response.data['routes'].isNotEmpty) {
-        Set<Polyline> newPolylines = {};
-        Set<Marker> newMarkers = {};
-
-        for (int i = 0; i < response.data['routes'].length; i++) {
-          var points = response.data['routes'][i]['overview_polyline']['points'];
-          var decodedPoints = _decodePolyline(points);
-
-          newPolylines.add(
-            Polyline(
-              polylineId: PolylineId('route$i'),
-              points: decodedPoints,
-              color: i == 0 ? Colors.blue : Colors.grey,
-              width: 5,
-              onTap: () {
-                _showRouteInfo(context, response.data['routes'][i]);
-              },
-            ),
-          );
-
-          // Marker ekleme
-          for (int j = 0; j < decodedPoints.length; j += 5) {
-            newMarkers.add(
-              Marker(
-                markerId: MarkerId('marker$i$j'),
-                position: decodedPoints[j],
-                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-                onTap: () {
-                  _showRouteInfo(context, response.data['routes'][i]);
-                },
-              ),
-            );
-          }
-        }
-
-        ref.read(polylineProvider.notifier).state = newPolylines;
-        ref.read(markerProvider.notifier).state = newMarkers;
-
-        // Şarj noktalarını ekle
-        if (chargePointsAsyncValue.asData != null) {
-          var chargePoints = chargePointsAsyncValue.asData!.value;
-          for (var point in chargePoints) {
-            newMarkers.add(
-              Marker(
-                markerId: MarkerId(point['ID'].toString()),
-                position: LatLng(point['AddressInfo']['Latitude'], point['AddressInfo']['Longitude']),
-                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-                infoWindow: InfoWindow(
-                  title: point['AddressInfo']['Title'],
-                  snippet: 'Şarj Noktası',
-                ),
-              ),
-            );
-          }
-        }
-
-        // Mevcut marker setine yeni markerları ekleyin
-        ref.read(markerProvider.notifier).state = {
-          ...ref.read(markerProvider.notifier).state,
-          ...newMarkers,
-        };
-
-        // Kamerayı rotayı gösterecek şekilde hareket ettir
-        var allLatLng = newPolylines.expand((polyline) => polyline.points).toList();
-        mapController?.animateCamera(
-          CameraUpdate.newLatLngBounds(
-            LatLngBounds(
-              southwest: LatLng(
-                allLatLng.map((p) => p.latitude).reduce((a, b) => a < b ? a : b),
-                allLatLng.map((p) => p.longitude).reduce((a, b) => a < b ? a : b),
-              ),
-              northeast: LatLng(
-                allLatLng.map((p) => p.latitude).reduce((a, b) => a > b ? a : b),
-                allLatLng.map((p) => p.longitude).reduce((a, b) => a > b ? a : b),
-              ),
-            ),
-            50.0, // Kenar boşluğu
-          ),
+        var cmvo = CMVOAlgorithm(
+          routes: response.data['routes'],
+          batteryCapacity: batteryCapacity,
+          energyConsumption: energyConsumption,
+          batteryPercentage: batteryPercentage,
+          chargePoints: chargePointsAsyncValue.asData!.value,
+          endLocation: endLocation!,
+          ref: ref,
         );
-        isRouteDrawn = true; // Rota çizildiğinde bayrağı güncelle
 
-        // Kaotik Çoklu Evren Algoritması ile en uygun yolu bulma
-        _findOptimalRoute(response.data['routes'], batteryCapacity, batteryPercentage, energyConsumption, chargePointsAsyncValue.asData!.value);
+        cmvo.run();
+
+        // Set<Polyline> newPolylines = {};
+        // Set<Marker> newMarkers = {};
+        //
+        // for (int i = 0; i < response.data['routes'].length; i++) {
+        //   var points = response.data['routes'][i]['overview_polyline']['points'];
+        //   var decodedPoints = _decodePolyline(points);
+        //
+        //   newPolylines.add(
+        //     Polyline(
+        //       polylineId: PolylineId('route$i'),
+        //       points: decodedPoints,
+        //       color: i == 0 ? Colors.blue : Colors.grey,
+        //       width: 5,
+        //       onTap: () {
+        //         _showRouteInfo(context, response.data['routes'][i]);
+        //       },
+        //     ),
+        //   );
+        //
+        //   // Marker ekleme
+        //   for (int j = 0; j < decodedPoints.length; j += 5) {
+        //     newMarkers.add(
+        //       Marker(
+        //         markerId: MarkerId('marker$i$j'),
+        //         position: decodedPoints[j],
+        //         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        //         onTap: () {
+        //           _showRouteInfo(context, response.data['routes'][i]);
+        //         },
+        //       ),
+        //     );
+        //   }
+        // }
+        //
+        // ref.read(polylineProvider.notifier).state = newPolylines;
+        // ref.read(markerProvider.notifier).state = newMarkers;
+        //
+        // // Şarj noktalarını ekle
+        // if (chargePointsAsyncValue.asData != null) {
+        //   var chargePoints = chargePointsAsyncValue.asData!.value;
+        //   for (var point in chargePoints) {
+        //     newMarkers.add(
+        //       Marker(
+        //         markerId: MarkerId(point['ID'].toString()),
+        //         position: LatLng(point['AddressInfo']['Latitude'], point['AddressInfo']['Longitude']),
+        //         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        //         infoWindow: InfoWindow(
+        //           title: point['AddressInfo']['Title'],
+        //           snippet: 'Şarj Noktası',
+        //         ),
+        //       ),
+        //     );
+        //   }
+        // }
+        //
+        // // Mevcut marker setine yeni markerları ekleyin
+        // ref.read(markerProvider.notifier).state = {
+        //   ...ref.read(markerProvider.notifier).state,
+        //   ...newMarkers,
+        // };
+        //
+        // // Kamerayı rotayı gösterecek şekilde hareket ettir
+        // var allLatLng = newPolylines.expand((polyline) => polyline.points).toList();
+        // mapController?.animateCamera(
+        //   CameraUpdate.newLatLngBounds(
+        //     LatLngBounds(
+        //       southwest: LatLng(
+        //         allLatLng.map((p) => p.latitude).reduce((a, b) => a < b ? a : b),
+        //         allLatLng.map((p) => p.longitude).reduce((a, b) => a < b ? a : b),
+        //       ),
+        //       northeast: LatLng(
+        //         allLatLng.map((p) => p.latitude).reduce((a, b) => a > b ? a : b),
+        //         allLatLng.map((p) => p.longitude).reduce((a, b) => a > b ? a : b),
+        //       ),
+        //     ),
+        //     50.0, // Kenar boşluğu
+        //   ),
+        // );
+        // isRouteDrawn = true; // Rota çizildiğinde bayrağı güncelle
+        //
+        // // Kaotik Çoklu Evren Algoritması ile en uygun yolu bulma
+        // _findOptimalRoute(response.data['routes'], batteryCapacity, batteryPercentage, energyConsumption, chargePointsAsyncValue.asData!.value, endLocation);
       }
     }
 
@@ -309,66 +322,138 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   // Kaotik Çoklu Evren Algoritması ile en uygun yolu bulma
-  void _findOptimalRoute(List<dynamic> routes, double batteryCapacity, double batteryPercentage, double energyConsumption, List<dynamic> chargePoints) {
-    // Enerji hesaplamaları
-    double availableEnergy = (batteryCapacity * (batteryPercentage / 100));
-    double maxDistance = (availableEnergy / energyConsumption) * 1000; // km cinsinden
+  // En yakın şarj istasyonunu bulma ve rotaya ekleme fonksiyonu
+  void _findOptimalRoute(List<dynamic> routes, double batteryCapacity, double batteryPercentage, double energyConsumption, List<dynamic> chargePoints, String endLocation) {
+    double availableEnergy = batteryCapacity * (batteryPercentage / 100);
+    double maxTravelDistance = (availableEnergy / energyConsumption) * 1000; // km cinsinden
 
-    // Rota ve şarj noktaları için CMVO başlangıcı
-    var universe = routes.map((route) {
+    List<Map<String, dynamic>> universe = routes.map((route) {
       double distance = route['legs'][0]['distance']['value'] / 1000.0; // metreyi km'ye çevir
       return {
         'distance': distance,
         'points': route['overview_polyline']['points'],
-        'isBlackHole': distance > maxDistance // Kara delik: Yol çok uzun, şarj yetmeyebilir
+        'chargeNeeded': distance > maxTravelDistance,
+        'fitness': distance > maxTravelDistance ? double.infinity : distance, // CMVO için fitness değeri
       };
     }).toList();
 
-    // Kara delikleri eler, beyaz delikleri ve solucan deliklerini belirle
-    universe.removeWhere((element) => element['isBlackHole']);
-    universe.forEach((element) {
-      if (element['distance'] <= maxDistance) {
-        var decodedPoints = _decodePolyline(element['points']);
-        ref.read(polylineProvider.notifier).state.add(
-          Polyline(
-            polylineId: PolylineId('optimalRoute'),
-            points: decodedPoints,
-            color: Colors.green,
-            width: 5,
-          ),
-        );
-      } else {
-        // Solucan delikleri ara: En yakın şarj istasyonuna yönlendir
-        // Şarj istasyonları arasında en uygununu bul
-        var closestStation = _findClosestChargePoint(chargePoints, element['points']);
-        if (closestStation != null) {
-          ref.read(markerProvider.notifier).state.add(
-            Marker(
-              markerId: MarkerId('chargeStation${closestStation['ID']}'),
-              position: LatLng(closestStation['AddressInfo']['Latitude'], closestStation['AddressInfo']['Longitude']),
-              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-              infoWindow: InfoWindow(
-                title: 'Şarj İstasyonu',
-                snippet: closestStation['AddressInfo']['Title'],
-              ),
-            ),
-          );
-          // Rota güncellenir, solucan deliği ile yolun yeni kısmı eklenir
-          var additionalPoints = _decodePolyline(closestStation['points']);
-          ref.read(polylineProvider.notifier).state.add(
-            Polyline(
-              polylineId: PolylineId('toChargeStation'),
-              points: additionalPoints,
-              color: Colors.orange,
-              width: 5,
-            ),
-          );
+    // Logistic Map kullanarak kaotik harita oluşturma
+    double chaoticMap(double x) => 4.0 * x * (1 - x);
+
+    // Kaotik Çoklu Evren Algoritması (CMVO)
+    for (int t = 0; t < 100; t++) {
+      for (var element in universe) {
+        double r = chaoticMap(Random().nextDouble()); // Kaotik harita
+        if (element['chargeNeeded']) {
+          // Solucan deliği: En yakın şarj istasyonunu bul ve rotayı ekle
+          dynamic closestChargePoint = _findClosestChargePoint(chargePoints, _decodePolyline(element['points']));
+          if (closestChargePoint != null) {
+            // Şarj istasyonuna rota çiz
+            _drawRouteToChargeStation(_decodePolyline(element['points']), closestChargePoint);
+            // Şarj istasyonundan sonraki hedefe rota çiz
+            _drawRemainingRoute(closestChargePoint, endLocation);
+            element['fitness'] = _calculateDistance(_decodePolyline(element['points']).first, LatLng(closestChargePoint['AddressInfo']['Latitude'], closestChargePoint['AddressInfo']['Longitude']));
+          }
+        } else {
+          // Beyaz delik: Doğrudan rota çiz
+          //_drawPolyline(_decodePolyline(element['points']), Colors.green);
+          element['fitness'] = element['distance'];
         }
       }
-    });
+    }
+
+    // En uygun rota seçimi
+    var bestRoute = universe.reduce((a, b) => a['fitness'] < b['fitness'] ? a : b);
+    if (bestRoute['chargeNeeded']) {
+      // Şarj istasyonuna rota ve şarj istasyonundan sonra rota
+      dynamic closestChargePoint = _findClosestChargePoint(chargePoints, _decodePolyline(bestRoute['points']));
+      _drawRouteToChargeStation(_decodePolyline(bestRoute['points']), closestChargePoint);
+      _drawRemainingRoute(closestChargePoint, endLocation);
+    } else {
+      // Doğrudan rota
+      _drawPolyline(_decodePolyline(bestRoute['points']), Colors.green);
+    }
   }
 
-  // En yakın şarj istasyonunu bulma fonksiyonu
+// En yakın şarj istasyonunu bulma ve rotaya ekleme fonksiyonları aynı kalır
+  void _drawPolyline(List<LatLng> points, Color color) {
+    ref.read(polylineProvider.notifier).state.add(
+      Polyline(
+        polylineId: PolylineId('route_${UniqueKey().toString()}'),
+        points: points,
+        color: color,
+        width: 5,
+      ),
+    );
+  }
+
+  // Şarj istasyonuna giden yolun rota çizgilerini çizen fonksiyon
+  void _drawRouteToChargeStation(List<LatLng> routePoints, dynamic chargeStation) async {
+    var response = await Dio().get(
+      'https://maps.googleapis.com/maps/api/directions/json',
+      queryParameters: {
+        'origin': '${routePoints.first.latitude},${routePoints.first.longitude}',
+        'destination': '${chargeStation['AddressInfo']['Latitude']},${chargeStation['AddressInfo']['Longitude']}',
+        'key': dotenv.env['GOOGLE_API_KEY'],
+      },
+    );
+
+    if (response.data['routes'].isNotEmpty) {
+      var points = response.data['routes'][0]['overview_polyline']['points'];
+      var decodedPoints = _decodePolyline(points);
+
+      ref.read(polylineProvider.notifier).state.add(
+        Polyline(
+          polylineId: PolylineId('toChargeStation'),
+          points: decodedPoints,
+          color: Colors.orange,
+          width: 5,
+        ),
+      );
+    }
+  }
+
+  // Şarj istasyonundan hedefe giden yolun rota çizgilerini çizen fonksiyon
+  void _drawRemainingRoute(dynamic chargeStation, String? endLocation) async {
+    var response = await Dio().get(
+      'https://maps.googleapis.com/maps/api/directions/json',
+      queryParameters: {
+        'origin': '${chargeStation['AddressInfo']['Latitude']},${chargeStation['AddressInfo']['Longitude']}',
+        'destination': endLocation,
+        'key': dotenv.env['GOOGLE_API_KEY'],
+      },
+    );
+
+    if (response.data['routes'].isNotEmpty) {
+      var points = response.data['routes'][0]['overview_polyline']['points'];
+      var decodedPoints = _decodePolyline(points);
+
+      ref.read(polylineProvider.notifier).state.add(
+        Polyline(
+          polylineId: PolylineId('remainingRoute'),
+          points: decodedPoints,
+          color: Colors.green,
+          width: 5,
+        ),
+      );
+    }
+  }
+
+// Şarj istasyonuna giden yolun rota çizgilerini çizen fonksiyon
+  void _routeToChargeStation(List<LatLng> routePoints, LatLng stationPosition) {
+    // Burada, başlangıç noktasından şarj istasyonuna giden yolu hesaplayıp çizin
+    List<LatLng> pathToStation = [routePoints.first, stationPosition]; // Basit bir örnek
+    ref.read(polylineProvider.notifier).state.add(
+      Polyline(
+        polylineId: PolylineId('toChargeStation'),
+        points: pathToStation,
+        color: Colors.orange,
+        width: 5,
+      ),
+    );
+  }
+
+  // İki nokta arası en kısa mesafeyi hesaplayan fonksiyon
   dynamic _findClosestChargePoint(List<dynamic> chargePoints, List<LatLng> routePoints) {
     dynamic closest = null;
     double minDistance = double.infinity;

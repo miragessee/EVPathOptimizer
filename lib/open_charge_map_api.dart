@@ -17,7 +17,7 @@ final chargePointsProvider = FutureProvider<List<dynamic>>((ref) async {
       queryParameters: {
         'output': 'json',
         'countrycode': 'TR',
-        'maxresults': 50,
+        'maxresults': 200000,
         'compact': true,
         'verbose': false,
         'key': 'bce29668-57a8-41df-9dc0-ef67dc9af85e',
