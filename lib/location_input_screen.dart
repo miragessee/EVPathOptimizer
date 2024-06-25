@@ -12,6 +12,19 @@ class LocationInputScreen extends ConsumerWidget {
     final startLocation = ref.watch(startLocationProvider);
     final endLocation = ref.watch(endLocationProvider);
 
+    void drawRoute() {
+      Navigator.of(context).pop(); // Mevcut sayfayı kapat
+      // Rotaları ve markerları temizle
+      ref.read(polylineProvider.notifier).state.clear();
+      ref.read(markerProvider.notifier).state.clear();
+      ref.read(selectedRouteProvider.notifier).state = null;
+
+      // MapScreen'e git ve yeni rota çizimini tetikle
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => MapScreen()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Nereden -> Nereye'),
@@ -75,7 +88,7 @@ class LocationInputScreen extends ConsumerWidget {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  Navigator.of(context).pop();
+                  drawRoute();
                 },
                 child: Text('Yolu Çiz', style: TextStyle(fontSize: 18)),
                 style: ElevatedButton.styleFrom(
